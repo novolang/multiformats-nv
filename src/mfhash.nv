@@ -1,0 +1,206 @@
+// mfhash — multihash: a digest that says which function made it.
+//
+// Every body is a `todo()`.  The signatures are the design, and the
+// compiler checks them as claims; see the README for the stamp.
+//
+// WHAT IT IS.  Three parts, in this order: the multicodec of the hash
+// function, as a varint; the digest's length in bytes, as a varint; and
+// the digest.  A SHA-256 multihash is therefore `0x12 0x20` and then
+// thirty-two bytes, which is where a version 0 content identifier's
+// thirty-four bytes come from.
+//
+// The problem it solves is that a bare digest does not say what made
+// it, so a system that stored one could never move to a different hash
+// function without reinterpreting everything it had already stored.
+//
+// NO HASH FUNCTION IS IN THIS PACKAGE, AND THAT IS THE DECISION.  A
+// multihash here is a code, a length and bytes the CALLER computed.
+// The consequence is worth stating plainly: a program that parses,
+// compares, re-encodes and routes content identifiers links no hash
+// function at all.  A package that hashed would have had to depend on
+// SHA-2, SHA-3 and BLAKE2 to cover the codes in ordinary use, and every
+// consumer would carry all three to read an identifier it never
+// verifies.
+//
+// The caller that DOES verify computes the digest with crypto-nv,
+// sha3-nv or blake2-nv and calls `matches`.  `expected_length` is what
+// lets this package check the shape without computing anything: it
+// knows how long a `sha2-256` digest is, so a multihash claiming a
+// twenty-byte one is refused here rather than at the comparison.
+
+// A multihash.
+//
+// The digest is carried whole; the length varint on the wire is
+// `bytes.len(digest)` and is not stored twice.
+pub struct MfMultihash
+    // The multicodec of the hash function: `0x12` for sha2-256,
+    // `0x00` for identity.
+    code: MfCodec
+    // The digest.
+    digest: Bytes
+
+// A multihash from a function code and a digest the caller computed.
+//
+// `MfWrongDigestLength` when the code is one whose digest length this
+// package knows and the bytes are a different length — which is the
+// mistake that otherwise surfaces as an identifier that never matches
+// anything.  A code with no known length accepts any.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+//
+// fn main() [io]
+//     match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+//         Ok(h)  => println("${bytes.len(h.digest)}")   // 32
+//         Err(e) => println(e.message())
+// ```
+pub fn multihash(code: MfCodec, digest: Bytes) -> Result<MfMultihash, MfFault> []
+    todo("multiformats-nv.mfhash.multihash")
+
+// The digest length a hash function produces, or `None` when this
+// package has no entry for the code.
+//
+// `Some(32)` for sha2-256, sha3-256 and blake3; `Some(64)` for
+// sha2-512; `None` for the identity code, whose digest is the data and
+// therefore any length; `None` for a code the table does not name.
+//
+// ```novo
+// use mfcodec
+// use mfhash
+//
+// fn main() [io]
+//     match mfhash.expected_length(mfcodec.sha2_256())
+//         Some(n) => println("${n}")   // 32
+//         None    => println("this package does not know that function")
+// ```
+pub fn expected_length(code: MfCodec) -> ?Int []
+    todo("multiformats-nv.mfhash.expected_length")
+
+// An identity multihash: the data as its own digest.
+//
+// How a value small enough to fit is addressed without hashing it,
+// which is what an inline content identifier is.  No length rule
+// applies, because the digest IS the data.
+//
+// ```novo
+// use std.bytes
+// use mfhash
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.from_str("hi"))
+//     println("${bytes.len(h.digest)}")   // 2
+// ```
+pub fn identity_multihash(data: Bytes) -> MfMultihash []
+    todo("multiformats-nv.mfhash.identity_multihash")
+
+// The multihash as bytes: the code's varint, the length's varint, the
+// digest.
+//
+// ```novo
+// use std.bytes
+// use mfhash
+//
+// fn main() [io]
+//     println(bytes.to_hex(mfhash.to_bytes(mfhash.identity_multihash(bytes.zeros(0)))))
+// ```
+pub fn to_bytes(h: MfMultihash) -> Bytes []
+    todo("multiformats-nv.mfhash.to_bytes")
+
+// How many bytes the multihash occupies.
+//
+// Computed, not produced: the two varints plus the digest.  What a
+// caller sizing a buffer needs.
+pub fn encoded_len(h: MfMultihash) -> Int []
+    todo("multiformats-nv.mfhash.encoded_len")
+
+// A multihash from a whole buffer.
+//
+// `MfTrailingBytes` when the buffer is longer than the multihash, so a
+// caller handing over one buffer meant one multihash.
+//
+// ```novo
+// use std.bytes
+// use mfhash
+//
+// fn main() [io]
+//     match mfhash.from_bytes(bytes.from_hex("0000") ?? bytes.zeros(0))
+//         Ok(_)  => println("an identity multihash of zero bytes, then one spare")
+//         Err(e) => println(e.message())
+// ```
+pub fn from_bytes(src: Bytes) -> Result<MfMultihash, MfFault> []
+    todo("multiformats-nv.mfhash.from_bytes")
+
+// A multihash from the front of a buffer, leaving the rest.
+//
+// What the content-identifier reader uses, since a multihash is the
+// tail of a version 1 identifier and the whole of a version 0 one.
+pub fn read(src: Bytes, at: Int) -> Result<MfHashRead, MfFault> []
+    todo("multiformats-nv.mfhash.read")
+
+// One multihash read out of a buffer.
+pub struct MfHashRead
+    // The multihash.
+    hash: MfMultihash
+    // How many bytes it took.
+    len: Int
+
+// Whether a digest the caller computed is the one this multihash
+// carries.
+//
+// THE VERIFICATION HALF, and the whole of it.  The caller hashes the
+// data with crypto-nv, sha3-nv or blake2-nv — whichever answers the
+// code this multihash names — and hands the digest over.  A comparison
+// and nothing else, so a program that verifies links one hash function
+// and not four.
+//
+// False when the lengths differ, which is what a wrong function looks
+// like from here.
+//
+// ```novo
+// use std.bytes
+// use mfhash
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.from_str("hi"))
+//     println("${mfhash.matches(h, bytes.from_str("hi"))}")   // true
+// ```
+pub fn matches(h: MfMultihash, digest: Bytes) -> Bool []
+    todo("multiformats-nv.mfhash.matches")
+
+// Whether the multihash's code is one this package knows, and whether
+// its digest is the length that code produces.
+//
+// `Ok(true)` when both hold or when the code is one with no known
+// length, and the fault naming the mismatch otherwise.  What a program
+// validating identifiers it was given runs, without computing anything.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+//
+// fn main() [io]
+//     match mfhash.check(MfMultihash { code: mfcodec.sha2_256(), digest: bytes.zeros(20) })
+//         Ok(_)  => println("this cannot happen — sha2-256 is 32 bytes")
+//         Err(e) => println(e.message())
+// ```
+pub fn check(h: MfMultihash) -> Result<Bool, MfFault> []
+    todo("multiformats-nv.mfhash.check")
+
+// The multihash written as hexadecimal, the way the multiformats tools
+// print one: the code's name, the length and the digest.
+//
+// `"sha2-256 32 e3b0c442…"`.  What a diagnostic shows, and what a
+// person comparing two identifiers by eye reads.
+//
+// ```novo
+// use std.bytes
+// use mfhash
+//
+// fn main() [io]
+//     println(mfhash.describe(mfhash.identity_multihash(bytes.zeros(0))))
+// ```
+pub fn describe(h: MfMultihash) -> Str []
+    todo("multiformats-nv.mfhash.describe")

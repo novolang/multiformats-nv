@@ -1,0 +1,99 @@
+// mfvarint — the unsigned varint the whole family is built out of.
+//
+// Every body is a `todo()`.  The signatures are the design, and the
+// compiler checks them as claims; see the README for the stamp.
+//
+// WHAT IT IS.  Seven bits of the number per byte, least significant
+// first, with the high bit of every byte but the last set to 1.  It is
+// the encoding protocol buffers calls a varint, with two rules the
+// multiformats specification adds on top:
+//
+//   1. NINE BYTES AT MOST, so a varint holds at most sixty-three bits.
+//      The cap exists so that a parser can bound its work before it
+//      starts, and so that a hostile identifier cannot ask it to read
+//      forever.
+//   2. THE SHORTEST FORM ONLY.  `0x81 0x00` and `0x01` are the same
+//      number, and a format whose values are content addresses cannot
+//      have two spellings of one identifier — two spellings are two
+//      addresses for one object, which is exactly the property the
+//      whole family exists to prevent.
+//
+// Both are refusals here and not tolerances, and both are the reason
+// this is a module rather than four copies of a loop.
+
+// How many bytes this number needs.
+//
+// One for anything below 128, two below 16384, and so on to nine.
+//
+// ```novo
+// use mfvarint
+//
+// fn main() [io]
+//     println("${mfvarint.encoded_len(127)}")   // 1
+//     println("${mfvarint.encoded_len(128)}")   // 2
+// ```
+pub fn encoded_len(n: Int) -> Int []
+    todo("multiformats-nv.mfvarint.encoded_len")
+
+// The number as its shortest varint.
+//
+// A negative number has no varint — the encoding is unsigned — and this
+// answers the empty buffer for one, because a constructor with no error
+// channel should not be the thing that reports it.  `mfvarint.check`
+// is the function that asks.
+//
+// ```novo
+// use std.bytes
+// use mfvarint
+//
+// fn main() [io]
+//     println(bytes.to_hex(mfvarint.encode(300)))   // ac02
+// ```
+pub fn encode(n: Int) -> Bytes []
+    todo("multiformats-nv.mfvarint.encode")
+
+// Whether a number can be written as a varint at all: not negative, and
+// below 2^63.
+//
+// ```novo
+// use mfvarint
+//
+// fn main() [io]
+//     println("${mfvarint.check(0 - 1)}")   // false
+// ```
+pub fn check(n: Int) -> Bool []
+    todo("multiformats-nv.mfvarint.check")
+
+// A varint read from a buffer at an offset.
+//
+// `MfVarintNotMinimal` for a longer spelling of a number that fits in
+// fewer bytes, `MfVarintTooLong` for one that runs past nine bytes, and
+// `MfTruncated` when the buffer ends first.
+//
+// ```novo
+// use std.bytes
+// use mfvarint
+//
+// fn main() [io]
+//     match mfvarint.decode(bytes.from_hex("ac02") ?? bytes.zeros(0), 0)
+//         Ok(r)  => println("${r.value} in ${r.len} byte(s)")   // 300 in 2
+//         Err(e) => println(e.message())
+// ```
+pub fn decode(src: Bytes, at: Int) -> Result<MfVarint, MfFault> []
+    todo("multiformats-nv.mfvarint.decode")
+
+// One varint read out of a buffer.
+pub struct MfVarint
+    // The number.
+    value: Int
+    // How many bytes it took, so the caller knows where the next one
+    // starts.
+    len: Int
+
+// Every varint in a buffer, read one after another to the end.
+//
+// `MfTrailingBytes` is never raised here: the buffer is varints all the
+// way or it is a fault.  What a caller inspecting a prefix of codes
+// uses.
+pub fn decode_all(src: Bytes) -> Result<[Int], MfFault> []
+    todo("multiformats-nv.mfvarint.decode_all")

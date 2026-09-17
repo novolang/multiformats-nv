@@ -1,0 +1,58 @@
+[package]
+name        = "multiformats-nv"
+version     = "0.0.1"
+description = "multibase, multicodec, multihash and the content identifier, as values.  A multihash is a code, a length and a digest the CALLER computed — no hash function is in this package, so adding one does not mean adding a dependency to everything that parses a CID.  Version 0 and version 1 identifiers both ways, with the conversion between them refused by name when version 0's fixed codec and digest do not hold.  Interface only — every body is a todo()."
+license     = "Apache-2.0"
+
+# An INTERFACE release: every `pub fn` body is a `todo()`, so the
+# signatures and the effect rows are published and nothing is
+# implemented.  `novo pkg publish` recognises the shape and requires
+# both the draft stability and the 0.0.x version; the first
+# implementation is the 0.1.0 published over it.
+stability   = "draft"
+
+# `core`: arithmetic over bytes the caller already holds, and table
+# lookups.  Every public function declares `[]`, and the effect that
+# would have arrived with a hash function never does, because no hash
+# function is here: a digest is a parameter.
+#
+# NO `tests/embedded_probe.nv`, and the absence is a claim not made
+# rather than a claim skipped.  The varint and the multihash halves
+# would build for a device — they are byte arithmetic over a buffer —
+# but the multibase alphabets and the codec name table are owned
+# strings, and a claim that covered only half the package would have to
+# be qualified in every sentence that stated it.  Splitting the device
+# half out is a decision for the implementation.
+layer       = "core"
+
+category    = "encoding"
+
+tags        = ["multiformats", "multibase", "multihash", "multicodec", "cid", "ipfs", "varint"]
+repository  = "https://github.com/novolang/multiformats-nv"
+maintainers = ["novo-lang"]
+novo        = ">= 0.9.0"
+
+# A library: no `main`, so `novo pkg build` type-checks and
+# effect-checks every module under `src/` and writes no binary.
+
+[docs.pages]
+"README.md" = "Self-describing identifiers: multibase, multihash, multicodec and the CID"
+
+[dependencies]
+# None, and the absence is the design rather than an accident.
+#
+# NOT a hash package.  A multihash is a function code, a digest length
+# and the digest, and this package never computes one: the caller hands
+# in bytes it already has, or names a code and supplies the digest
+# later.  A CID is parsed, compared, converted between its two versions
+# and rendered in any multibase without a single hash function being
+# linked — which is what stops a program that only reads identifiers
+# from acquiring SHA-3 and BLAKE2 to do it.  crypto-nv, sha3-nv and
+# blake2-nv are where the functions live, and the README says which
+# code each of them answers.
+#
+# NOT a base-encoding package.  The multibase alphabets are the
+# encodings' own, and base58btc in particular is not in any of them:
+# base58 is a big-integer division and not a bit regrouping, so it
+# shares no code with base32 or base64 and would not have come from a
+# dependency anyway.

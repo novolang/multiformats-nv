@@ -1,0 +1,227 @@
+// mfcodec — multicodec: what the bytes after this point are.
+//
+// Every body is a `todo()`.  The signatures are the design, and the
+// compiler checks them as claims; see the README for the stamp.
+//
+// WHAT IT IS.  A multicodec is a varint at the front of a buffer saying
+// what the rest of the buffer is.  `0x55` is raw bytes, `0x70` is
+// dag-pb, `0x71` is dag-cbor, `0x12` is a SHA-256 digest, `0xed` is an
+// Ed25519 public key.  The table is a file in the multiformats
+// repository with several hundred rows, and it grows.
+//
+// AN UNKNOWN CODE IS CARRIED, NOT REFUSED, AND THAT IS THE DECISION
+// THIS MODULE IS FOR.  A content identifier whose codec this build has
+// no name for is still a valid identifier: its bytes are well formed,
+// it compares equal to itself, it re-encodes into another multibase,
+// and a program routing it has no need to know what it points at.  A
+// package that refused one would be a package that had to be
+// re-released every time the table grew, and every consumer upgraded
+// with it.
+//
+// So `MfCodec` is the NUMBER, and the name is a lookup that may answer
+// `""`.  `is_known` is how a caller that genuinely needs the name finds
+// out, and the table this package carries is the subset a content
+// identifier, a peer identifier and a cryptographic key actually use.
+
+// A multicodec code.
+//
+// A struct over the varint rather than an enum, because the table has
+// several hundred rows and grows, and because an unknown code has to be
+// representable.
+//
+// ```novo
+// use mfcodec
+//
+// fn main() [io]
+//     println(mfcodec.name_of(mfcodec.codec(85)))   // raw
+// ```
+pub struct MfCodec
+    // The code itself, as the varint spells it.
+    code: Int
+
+// A codec from its code.
+pub fn codec(code: Int) -> MfCodec []
+    todo("multiformats-nv.mfcodec.codec")
+
+// The codec's name in the multicodec table, or `""` when this package
+// has no entry for it.
+//
+// The empty string is not a failure.  It means the table grew and this
+// build has not; the identifier is still good.
+pub fn name_of(c: MfCodec) -> Str []
+    todo("multiformats-nv.mfcodec.name_of")
+
+// Whether this package has a name for the code.
+//
+// ```novo
+// use mfcodec
+//
+// fn main() [io]
+//     println("${mfcodec.is_known(mfcodec.codec(85))}")     // true
+//     println("${mfcodec.is_known(mfcodec.codec(999999))}") // false
+// ```
+pub fn is_known(c: MfCodec) -> Bool []
+    todo("multiformats-nv.mfcodec.is_known")
+
+// The codec of that name, or `None`.
+//
+// For a caller taking a codec from a configuration file or a
+// command-line flag.
+//
+// ```novo
+// use mfcodec
+//
+// fn main() [io]
+//     match mfcodec.codec_of_name("dag-cbor")
+//         Some(c) => println("${c.code}")   // 113
+//         None    => println("no such codec in this table")
+// ```
+pub fn codec_of_name(name: Str) -> ?MfCodec []
+    todo("multiformats-nv.mfcodec.codec_of_name")
+
+// Every codec this package has a name for, in code order.
+//
+// Exposed so that a reader can see exactly which subset of the table is
+// here, and so a caller can print it rather than guess.
+//
+// ```novo
+// use mfcodec
+//
+// fn main() [io]
+//     println("${list.len(mfcodec.known_codecs())}")
+// ```
+pub fn known_codecs() -> [MfCodec] []
+    todo("multiformats-nv.mfcodec.known_codecs")
+
+// Which part of the table the code is in: `"multihash"`, `"ipld"`,
+// `"key"`, `"multiaddr"`, `"serialization"`, `"namespace"`, or `""`
+// for a code this package has no entry for.
+//
+// The table's own `tag` column.  It is what a caller validating a
+// content identifier checks: the codec of a CID must be an `ipld` or a
+// `serialization` entry, and the code inside its multihash must be a
+// `multihash` one, and a file that has them the other way round is one
+// somebody built wrongly.
+//
+// ```novo
+// use mfcodec
+//
+// fn main() [io]
+//     println(mfcodec.tag_of(mfcodec.sha2_256()))   // multihash
+// ```
+pub fn tag_of(c: MfCodec) -> Str []
+    todo("multiformats-nv.mfcodec.tag_of")
+
+// `0x00` — identity: the bytes are themselves.
+//
+// As a multihash function it means the digest IS the data, which is how
+// a value small enough to fit is addressed without hashing it.
+pub fn identity() -> MfCodec []
+    todo("multiformats-nv.mfcodec.identity")
+
+// `0x55` — raw: the block is bytes with no structure.
+//
+// ```novo
+// use mfcodec
+//
+// fn main() [io]
+//     println("${mfcodec.raw().code}")   // 85
+// ```
+pub fn raw() -> MfCodec []
+    todo("multiformats-nv.mfcodec.raw")
+
+// `0x70` — dag-pb: the protobuf-shaped node a version 0 identifier
+// always points at.
+pub fn dag_pb() -> MfCodec []
+    todo("multiformats-nv.mfcodec.dag_pb")
+
+// `0x71` — dag-cbor.
+pub fn dag_cbor() -> MfCodec []
+    todo("multiformats-nv.mfcodec.dag_cbor")
+
+// `0x0129` — dag-json.
+pub fn dag_json() -> MfCodec []
+    todo("multiformats-nv.mfcodec.dag_json")
+
+// `0x12` — sha2-256.  The hash function a version 0 identifier always
+// uses.
+pub fn sha2_256() -> MfCodec []
+    todo("multiformats-nv.mfcodec.sha2_256")
+
+// `0x13` — sha2-512.
+pub fn sha2_512() -> MfCodec []
+    todo("multiformats-nv.mfcodec.sha2_512")
+
+// `0x16` — sha3-256.
+pub fn sha3_256() -> MfCodec []
+    todo("multiformats-nv.mfcodec.sha3_256")
+
+// `0x1e` — blake3.
+pub fn blake3() -> MfCodec []
+    todo("multiformats-nv.mfcodec.blake3")
+
+// `0xb220` — blake2b-256.
+//
+// The blake2b codes are a RANGE, not a list: `0xb200` plus the digest
+// length in bytes, so blake2b-256 is `0xb220` and blake2b-512 is
+// `0xb240`.  `blake2b_of_length` is that arithmetic, named.
+pub fn blake2b_256() -> MfCodec []
+    todo("multiformats-nv.mfcodec.blake2b_256")
+
+// The blake2b code for a digest of this many bytes.
+//
+// `0xb200 + len`, for a length from 1 to 64.  Outside that range the
+// code is not a blake2b one and this answers the identity codec, which
+// `tag_of` will not call a multihash — a caller that wants the check
+// uses `mfhash.expected_length`.
+//
+// ```novo
+// use mfcodec
+//
+// fn main() [io]
+//     println("${mfcodec.blake2b_of_length(32).code}")   // 45600
+// ```
+pub fn blake2b_of_length(len: Int) -> MfCodec []
+    todo("multiformats-nv.mfcodec.blake2b_of_length")
+
+// `0xed` — the Ed25519 public key codec.
+//
+// Here because a libp2p peer identifier is a multihash of a key whose
+// bytes begin with this code, so a program that reads peer identifiers
+// meets it immediately.
+pub fn ed25519_pub() -> MfCodec []
+    todo("multiformats-nv.mfcodec.ed25519_pub")
+
+// The codec written as its varint bytes.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+//
+// fn main() [io]
+//     println(bytes.to_hex(mfcodec.to_bytes(mfcodec.dag_cbor())))   // 71
+// ```
+pub fn to_bytes(c: MfCodec) -> Bytes []
+    todo("multiformats-nv.mfcodec.to_bytes")
+
+// A codec read from the front of a buffer, with the number of bytes it
+// took.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+//
+// fn main() [io]
+//     match mfcodec.read(bytes.from_hex("71") ?? bytes.zeros(0), 0)
+//         Ok(r)  => println(mfcodec.name_of(r.codec))   // dag-cbor
+//         Err(e) => println(e.message())
+// ```
+pub fn read(src: Bytes, at: Int) -> Result<MfCodecRead, MfFault> []
+    todo("multiformats-nv.mfcodec.read")
+
+// One codec read out of a buffer.
+pub struct MfCodecRead
+    // The codec.
+    codec: MfCodec
+    // How many bytes its varint took.
+    len: Int

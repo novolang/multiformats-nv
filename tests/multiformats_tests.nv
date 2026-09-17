@@ -1,0 +1,447 @@
+// multiformats_tests.nv — the API suite, written against the
+// signatures.
+//
+// RED ON PURPOSE: every body under `src/` is a `todo()`, so every
+// assertion here reaches `not implemented:
+// multiformats-nv.<module>.<fn>`.  That is the expected state of an
+// interface release: the compiler has checked every signature, every
+// type and every effect row, and nothing else has been checked because
+// there is nothing else yet.
+//
+// THE VECTORS ARE THE MULTIFORMATS REPOSITORIES' OWN.  Each of the four
+// specifications ships a fixture file: the multibase repository's
+// `tests/` holds the same bytes encoded in every base in the table, the
+// multihash repository holds a table of encoded digests, the
+// multicodec repository holds `table.csv`, and the CID repository holds
+// a list of identifiers with their version, codec, hash and both text
+// forms.  Together they are what every implementation is measured
+// against.  The cases below are taken from them and from the worked
+// examples in the specifications; the generated run over the fixture
+// files lands with the implementation.
+
+use std.test
+use std.list
+use std.str
+use std.bytes
+use mferror
+use mfvarint
+use mfbase
+use mfcodec
+use mfhash
+use mfcid
+
+fn hex(s: Str) -> Bytes
+    bytes.from_hex(s) ?? bytes.zeros(0)
+
+// ── The varint, and its two extra rules ─────────────────────────────
+
+@test
+fn test_the_varint_is_seven_bits_a_byte_least_significant_first()
+    test.assert_eq(mfvarint.encoded_len(1), 1)
+    test.assert_eq(mfvarint.encoded_len(127), 1)
+    test.assert_eq(mfvarint.encoded_len(128), 2)
+    test.assert_eq(mfvarint.encoded_len(16383), 2)
+    test.assert_eq(mfvarint.encoded_len(16384), 3)
+    test.assert_eq(bytes.to_hex(mfvarint.encode(1)), "01")
+    test.assert_eq(bytes.to_hex(mfvarint.encode(127)), "7f")
+    test.assert_eq(bytes.to_hex(mfvarint.encode(128)), "8001")
+    test.assert_eq(bytes.to_hex(mfvarint.encode(300)), "ac02")
+    match mfvarint.decode(hex("ac02"), 0)
+        Err(e) => test.fail(e.message())
+        Ok(r)  =>
+            test.assert_eq(r.value, 300)
+            test.assert_eq(r.len, 2)
+
+@test
+fn test_a_varint_must_be_the_shortest_spelling()
+    // Two spellings of one number would be two addresses for one
+    // object, which is the property the whole family exists to
+    // prevent.
+    match mfvarint.decode(hex("8100"), 0)
+        Ok(_)  => test.fail("0x81 0x00 is a long spelling of 1")
+        Err(e) => test.assert_eq(mferror.code_of(e), "varint-not-minimal")
+
+@test
+fn test_a_varint_stops_at_nine_bytes()
+    // The cap is what lets a parser bound its work before it starts.
+    match mfvarint.decode(hex("ffffffffffffffffff7f"), 0)
+        Ok(_)  => test.fail("that is ten bytes")
+        Err(e) => test.assert_eq(mferror.code_of(e), "varint-too-long")
+    match mfvarint.decode(hex("80"), 0)
+        Ok(_)  => test.fail("that varint never ends")
+        Err(e) => test.assert_eq(mferror.code_of(e), "truncated")
+    test.assert_eq(mferror.offset_of(MfTruncated(7, 2)), 7)
+
+@test
+fn test_a_negative_number_has_no_varint()
+    test.assert(mfvarint.check(0))
+    test.assert(mfvarint.check(0 - 1) == false)
+    test.assert_eq(bytes.len(mfvarint.encode(0 - 1)), 0)
+
+@test
+fn test_a_buffer_of_varints_reads_end_to_end()
+    match mfvarint.decode_all(hex("0112"))
+        Err(e) => test.fail(e.message())
+        Ok(ns) =>
+            test.assert_eq(list.len(ns), 2)
+            test.assert_eq(list.get(ns, 1), 18)
+
+// ── Multibase ───────────────────────────────────────────────────────
+
+@test
+fn test_the_prefix_names_the_alphabet()
+    // `1111` is a valid base16, base32, base58 and base64 string with
+    // four different meanings, which is the problem this solves.
+    test.assert_eq(mfbase.prefix_of(MfBase58Btc), "z")
+    test.assert_eq(mfbase.prefix_of(MfBase32), "b")
+    test.assert_eq(mfbase.prefix_of(MfBase16), "f")
+    test.assert_eq(mfbase.prefix_of(MfBase64Url), "u")
+    test.assert_eq(mfbase.prefix_of(MfBase64), "m")
+    match mfbase.base_of_prefix("z")
+        Err(e) => test.fail(e.message())
+        Ok(b)  => test.assert_eq(mfbase.name_of(b), "base58btc")
+    match mfbase.base_of_prefix("q")
+        Ok(_)  => test.fail("`q` is not in the table")
+        Err(e) => test.assert_eq(mferror.code_of(e), "unknown-base")
+
+@test
+fn test_case_is_part_of_the_prefix_and_not_a_flag()
+    // A reader that lowercased a string before decoding would turn a
+    // `B` string into a `b` string whose payload no longer decodes.
+    test.assert_eq(mfbase.prefix_of(MfBase32Upper), "B")
+    test.assert_eq(mfbase.prefix_of(MfBase16Upper), "F")
+    test.assert_eq(mfbase.name_of(MfBase32Upper), "base32upper")
+    match mfbase.base_of_name("base32upper")
+        Err(e) => test.fail(e.message())
+        Ok(b)  => test.assert_eq(mfbase.prefix_of(b), "B")
+    match mfbase.base_of_name("base99")
+        Ok(_)  => test.fail("there is no base99")
+        Err(e) => test.assert_eq(mferror.code_of(e), "unknown-base")
+
+@test
+fn test_the_alphabets_are_the_lengths_their_names_say()
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase16)), 16)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase32)), 32)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase58Btc)), 58)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase64Url)), 64)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase32Z)), 32)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase36)), 36)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase8)), 8)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase2)), 2)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase10)), 10)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase32Hex)), 32)
+    test.assert_eq(mfbase.alphabet_of(MfIdentity), "")
+    // The Flickr alphabet differs from the Bitcoin one only in case
+    // order.
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase58Flickr)), 58)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase16Upper)), 16)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase32HexUpper)), 32)
+    test.assert_eq(str.len(mfbase.alphabet_of(MfBase36Upper)), 36)
+
+@test
+fn test_which_bases_pad_and_which_are_big_integer_conversions()
+    test.assert(mfbase.is_padded(MfBase64Pad))
+    test.assert(mfbase.is_padded(MfBase32Pad))
+    test.assert(mfbase.is_padded(MfBase32PadUpper))
+    test.assert(mfbase.is_padded(MfBase64UrlPad))
+    test.assert(mfbase.is_padded(MfBase64) == false)
+    // A big-integer base has to write a leading zero byte as a separate
+    // leading digit, which is why a base58btc string decoding to bytes
+    // beginning 0x00 begins with `1`.
+    test.assert(mfbase.is_big_integer_base(MfBase58Btc))
+    test.assert(mfbase.is_big_integer_base(MfBase58Flickr))
+    test.assert(mfbase.is_big_integer_base(MfBase36))
+    test.assert(mfbase.is_big_integer_base(MfBase10))
+    test.assert(mfbase.is_big_integer_base(MfBase32) == false)
+
+@test
+fn test_a_round_trip_through_a_prefix_and_back()
+    match mfbase.encode(MfBase16, hex("01"))
+        Err(e) => test.fail(e.message())
+        Ok(s)  =>
+            test.assert_eq(s, "f01")
+            match mfbase.decode(s)
+                Err(e2) => test.fail(e2.message())
+                Ok(b)   => test.assert_eq(bytes.to_hex(b), "01")
+    match mfbase.decode_tagged("f01")
+        Err(e) => test.fail(e.message())
+        Ok(d)  =>
+            test.assert_eq(mfbase.name_of(d.base), "base16")
+            test.assert_eq(bytes.to_hex(d.data), "01")
+    match mfbase.base_of("zQm")
+        Err(e) => test.fail(e.message())
+        Ok(b)  => test.assert_eq(mfbase.name_of(b), "base58btc")
+
+@test
+fn test_the_identity_base_is_not_text()
+    // Its prefix is a NUL byte, so its result is bytes.
+    match mfbase.encode(MfIdentity, hex("01"))
+        Ok(_)  => test.fail("an identity multibase is not a string")
+        Err(e) => test.assert_eq(mferror.code_of(e), "no-such-form")
+    test.assert_eq(bytes.len(mfbase.encode_bytes(MfIdentity, hex("01"))), 2)
+
+@test
+fn test_a_character_outside_the_alphabet_is_refused()
+    match mfbase.decode("fzz")
+        Ok(_)  => test.fail("`z` is not a hexadecimal digit")
+        Err(e) => test.assert_eq(mferror.code_of(e), "bad-base-char")
+
+// ── Multicodec ──────────────────────────────────────────────────────
+
+@test
+fn test_the_codes_this_package_names()
+    test.assert_eq(mfcodec.identity().code, 0)
+    test.assert_eq(mfcodec.raw().code, 85)
+    test.assert_eq(mfcodec.dag_pb().code, 112)
+    test.assert_eq(mfcodec.dag_cbor().code, 113)
+    test.assert_eq(mfcodec.dag_json().code, 297)
+    test.assert_eq(mfcodec.sha2_256().code, 18)
+    test.assert_eq(mfcodec.sha2_512().code, 19)
+    test.assert_eq(mfcodec.sha3_256().code, 22)
+    test.assert_eq(mfcodec.blake3().code, 30)
+    test.assert_eq(mfcodec.ed25519_pub().code, 237)
+    test.assert_eq(mfcodec.name_of(mfcodec.raw()), "raw")
+    test.assert_eq(mfcodec.name_of(mfcodec.dag_cbor()), "dag-cbor")
+
+@test
+fn test_the_blake2b_codes_are_a_range_and_not_a_list()
+    // 0xb200 plus the digest length in bytes.
+    test.assert_eq(mfcodec.blake2b_256().code, 45600)
+    test.assert_eq(mfcodec.blake2b_of_length(32).code, 45600)
+    test.assert_eq(mfcodec.blake2b_of_length(64).code, 45632)
+
+@test
+fn test_an_unknown_code_is_carried_and_not_refused()
+    // A package that refused one would have to be re-released every
+    // time the table grew, and every consumer upgraded with it.
+    let unknown = mfcodec.codec(999999)
+    test.assert(mfcodec.is_known(unknown) == false)
+    test.assert_eq(mfcodec.name_of(unknown), "")
+    test.assert_eq(mfcodec.tag_of(unknown), "")
+    test.assert(mfcodec.is_known(mfcodec.raw()))
+    test.assert(list.len(mfcodec.known_codecs()) > 0)
+    match mfcodec.codec_of_name("dag-cbor")
+        None    => test.fail("dag-cbor is in the table")
+        Some(c) => test.assert_eq(c.code, 113)
+    match mfcodec.codec_of_name("not-a-codec")
+        Some(_) => test.fail("that is not in the table")
+        None    => test.assert(true)
+
+@test
+fn test_the_table_tag_says_where_a_code_may_appear()
+    // A CID's codec must be an ipld or serialization entry and the code
+    // inside its multihash must be a multihash one.
+    test.assert_eq(mfcodec.tag_of(mfcodec.sha2_256()), "multihash")
+    test.assert_eq(mfcodec.tag_of(mfcodec.dag_cbor()), "ipld")
+    test.assert_eq(mfcodec.tag_of(mfcodec.ed25519_pub()), "key")
+
+@test
+fn test_a_codec_is_its_varint()
+    test.assert_eq(bytes.to_hex(mfcodec.to_bytes(mfcodec.dag_cbor())), "71")
+    test.assert_eq(bytes.to_hex(mfcodec.to_bytes(mfcodec.dag_json())), "a902")
+    match mfcodec.read(hex("71"), 0)
+        Err(e) => test.fail(e.message())
+        Ok(r)  =>
+            test.assert_eq(r.codec.code, 113)
+            test.assert_eq(r.len, 1)
+
+// ── Multihash, and the hash functions that are not here ─────────────
+
+@test
+fn test_a_multihash_is_a_code_a_length_and_a_digest()
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            test.assert_eq(bytes.len(h.digest), 32)
+            test.assert_eq(mfhash.encoded_len(h), 34)
+            let raw = mfhash.to_bytes(h)
+            test.assert_eq(bytes.len(raw), 34)
+            test.assert_eq(str.slice(bytes.to_hex(raw), 0, 4), "1220")
+
+@test
+fn test_the_digest_length_is_checked_against_the_function()
+    // The mistake that otherwise surfaces as an identifier that never
+    // matches anything.
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(20))
+        Ok(_)  => test.fail("a sha2-256 digest is 32 bytes")
+        Err(e) => test.assert_eq(mferror.code_of(e), "wrong-digest-length")
+    match mfhash.expected_length(mfcodec.sha2_256())
+        None    => test.fail("this package knows sha2-256")
+        Some(n) => test.assert_eq(n, 32)
+    match mfhash.expected_length(mfcodec.sha2_512())
+        None    => test.fail("this package knows sha2-512")
+        Some(n) => test.assert_eq(n, 64)
+    // The identity function's digest IS the data, so no length rule
+    // applies; nor does one for a code the table does not name.
+    match mfhash.expected_length(mfcodec.identity())
+        Some(_) => test.fail("the identity digest is any length")
+        None    => test.assert(true)
+    match mfhash.expected_length(mfcodec.codec(999999))
+        Some(_) => test.fail("this package does not know that function")
+        None    => test.assert(true)
+    match mfhash.check(MfMultihash { code: mfcodec.sha2_256(), digest: bytes.zeros(20) })
+        Ok(_)  => test.fail("that is the wrong length")
+        Err(e) => test.assert_eq(mferror.code_of(e), "wrong-digest-length")
+
+@test
+fn test_an_identity_multihash_addresses_data_without_hashing_it()
+    let h = mfhash.identity_multihash(bytes.from_str("hi"))
+    test.assert_eq(h.code.code, 0)
+    test.assert_eq(bytes.len(h.digest), 2)
+    match mfhash.check(h)
+        Err(e) => test.fail(e.message())
+        Ok(ok) => test.assert(ok)
+
+@test
+fn test_verification_is_a_comparison_and_nothing_else()
+    // The caller hashes with crypto-nv, sha3-nv or blake2-nv and hands
+    // the digest over, so a program that verifies links one hash
+    // function and not four.
+    let h = mfhash.identity_multihash(bytes.from_str("hi"))
+    test.assert(mfhash.matches(h, bytes.from_str("hi")))
+    test.assert(mfhash.matches(h, bytes.from_str("ho")) == false)
+    // A wrong function looks like a length mismatch from here.
+    test.assert(mfhash.matches(h, bytes.zeros(32)) == false)
+
+@test
+fn test_a_multihash_reads_from_a_whole_buffer_or_from_the_front()
+    match mfhash.from_bytes(hex("0000"))
+        Err(e) => test.fail(e.message())
+        Ok(h)  => test.assert_eq(bytes.len(h.digest), 0)
+    match mfhash.from_bytes(hex("000001"))
+        Ok(_)  => test.fail("one buffer means one multihash")
+        Err(e) => test.assert_eq(mferror.code_of(e), "trailing-bytes")
+    match mfhash.read(hex("000001"), 0)
+        Err(e) => test.fail(e.message())
+        Ok(r)  => test.assert_eq(r.len, 2)
+    test.assert(str.contains(mfhash.describe(
+        mfhash.identity_multihash(bytes.zeros(0))),
+        "identity"))
+
+// ── The content identifier ──────────────────────────────────────────
+
+@test
+fn test_version_1_is_a_version_a_codec_and_a_multihash()
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            let c = mfcid.cid_v1(mfcodec.raw(), h)
+            test.assert_eq(c.version, 1)
+            test.assert_eq(c.codec.code, 85)
+            // 0x01, 0x55, then the 34-byte multihash.
+            test.assert_eq(bytes.len(mfcid.to_bytes(c)), 36)
+            match mfcid.check(c)
+                Err(e2) => test.fail(e2.message())
+                Ok(ok)  => test.assert(ok)
+
+@test
+fn test_version_0_is_a_bare_sha2_256_multihash_and_nothing_else()
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            match mfcid.cid_v0(h)
+                Err(e2) => test.fail(e2.message())
+                Ok(c)   =>
+                    test.assert_eq(c.version, 0)
+                    test.assert_eq(c.codec.code, 112)
+                    // No version varint and no codec varint: 34 bytes.
+                    test.assert_eq(bytes.len(mfcid.to_bytes(c)), 34)
+                    // Which is why every version 0 identifier begins Qm.
+                    test.assert_eq(str.slice(mfcid.to_default_string(c), 0, 2), "Qm")
+    match mfcid.cid_v0(mfhash.identity_multihash(bytes.zeros(2)))
+        Ok(_)  => test.fail("version 0 is sha2-256 and nothing else")
+        Err(e) => test.assert_eq(mferror.code_of(e), "bad-cid-v0")
+
+@test
+fn test_every_v0_converts_up_and_only_some_v1_convert_down()
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            match mfcid.cid_v0(h)
+                Err(e2) => test.fail(e2.message())
+                Ok(v0)  =>
+                    let v1 = mfcid.to_v1(v0)
+                    test.assert_eq(v1.version, 1)
+                    test.assert_eq(v1.codec.code, 112)
+                    test.assert(mfcid.is_v0_convertible(v1))
+                    match mfcid.to_v0(v1)
+                        Err(e3)  => test.fail(e3.message())
+                        Ok(back) => test.assert(mfcid.equals(back, v0))
+            // A raw codec has no version 0 form: producing one would
+            // produce an identifier for different data.
+            let raw1 = mfcid.cid_v1(mfcodec.raw(), h)
+            test.assert(mfcid.is_v0_convertible(raw1) == false)
+            match mfcid.to_v0(raw1)
+                Ok(_)   => test.fail("raw is not dag-pb")
+                Err(e2) => test.assert_eq(mferror.code_of(e2), "not-v0-convertible")
+
+@test
+fn test_equality_is_over_the_bytes_and_not_the_text()
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            match mfcid.cid_v0(h)
+                Err(e2) => test.fail(e2.message())
+                Ok(v0)  =>
+                    let v1 = mfcid.to_v1(v0)
+                    // Different bytes, different identifiers: every
+                    // store that has both stores them as two keys.
+                    test.assert(mfcid.equals(v0, v1) == false)
+                    test.assert(mfcid.equals_any_version(v0, v1))
+
+@test
+fn test_the_text_form_takes_a_base_except_at_version_0()
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            let v1 = mfcid.cid_v1(mfcodec.raw(), h)
+            match mfcid.to_string(v1, MfBase32)
+                Err(e2) => test.fail(e2.message())
+                Ok(s)   =>
+                    test.assert_eq(str.slice(s, 0, 1), "b")
+                    match mfcid.parse(s)
+                        Err(e3)  => test.fail(e3.message())
+                        Ok(back) => test.assert(mfcid.equals(back, v1))
+            // Version 1 is conventionally base32; version 0 is always
+            // base58btc with no prefix at all.
+            test.assert_eq(str.slice(mfcid.to_default_string(v1), 0, 1), "b")
+            match mfcid.cid_v0(h)
+                Err(e2) => test.fail(e2.message())
+                Ok(v0)  =>
+                    match mfcid.to_string(v0, MfBase32)
+                        Ok(_)   => test.fail("a version 0 identifier has no prefix")
+                        Err(e3) => test.assert_eq(mferror.code_of(e3), "no-such-form")
+
+@test
+fn test_reading_an_identifier_from_bytes_and_from_the_front_of_a_buffer()
+    match mfcid.from_bytes(bytes.zeros(0))
+        Ok(_)  => test.fail("an empty buffer is not an identifier")
+        Err(e) => test.assert(mferror.offset_of(e) == 0)
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            let raw = mfcid.to_bytes(mfcid.cid_v1(mfcodec.raw(), h))
+            match mfcid.from_bytes(raw)
+                Err(e2) => test.fail(e2.message())
+                Ok(c)   => test.assert_eq(c.version, 1)
+            match mfcid.read(bytes.concat([raw, hex("ff")]), 0)
+                Err(e2) => test.fail(e2.message())
+                Ok(r)   => test.assert_eq(r.len, 36)
+            // The special case the specification writes down: 34 bytes
+            // beginning 0x12 0x20 is a version 0 identifier, which is
+            // why version 1 could not use 0x12 as its version number.
+            match mfcid.from_bytes(mfhash.to_bytes(h))
+                Err(e2) => test.fail(e2.message())
+                Ok(c)   => test.assert_eq(c.version, 0)
+    match mfcid.parse("not a cid")
+        Ok(_)  => test.fail("that is not an identifier")
+        Err(e) => test.assert(str.len(e.message()) > 0)
+
+@test
+fn test_an_identifier_describes_itself_for_a_person()
+    match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+        Err(e) => test.fail(e.message())
+        Ok(h)  =>
+            let d = mfcid.describe(mfcid.cid_v1(mfcodec.raw(), h))
+            test.assert(str.contains(d, "raw"))
+            test.assert(str.contains(d, "sha2-256"))

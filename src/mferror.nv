@@ -1,0 +1,97 @@
+// mferror — every refusal in the four formats, and the byte offset each
+// carries.
+//
+// Every body is a `todo()`.  The signatures are the design, and the
+// compiler checks them as claims; see the README for the stamp.
+//
+// ONE TAXONOMY FOR FOUR FORMATS, because they nest: a content
+// identifier is a multibase prefix around a version, a multicodec and a
+// multihash, and a multihash is two varints and a digest.  A caller
+// handed a bad identifier is handed one fault whichever layer found it,
+// and the offset says where.
+//
+// THE FAULT THAT IS NOT A FAULT.  `MfUnknownCodec` is NOT in this list,
+// and its absence is a decision: the multicodec table grows, and a
+// content identifier whose codec this build has no name for is still a
+// valid identifier that can be parsed, compared, re-encoded in another
+// base and handed on.  `mfcodec.name_of` answers `""` for one, and
+// nothing refuses it.
+
+// What went wrong.
+pub enum MfFault
+    // A varint that did not end: nine bytes with the continuation bit
+    // still set, or a buffer that ended mid-varint.  The multiformats
+    // varint is capped at nine bytes, which is sixty-three bits.
+    MfVarintTooLong(at: Int)
+    // The buffer ended before the varint, the digest or the identifier
+    // did.
+    MfTruncated(at: Int, need: Int)
+    // A varint written with more bytes than it needs: `0x81 0x00` for
+    // one.  The specification requires the shortest form, because two
+    // spellings of one number would be two identifiers for one object.
+    MfVarintNotMinimal(at: Int)
+    // The first character of a string is not a multibase prefix this
+    // package knows.
+    MfUnknownBase(prefix: Str)
+    // A character that is not in the alphabet the prefix named.
+    MfBadBaseChar(at: Int, base: Str, saw: Str)
+    // A base whose alphabet requires padding, given text whose length
+    // cannot be padded to.
+    MfBadPadding(at: Int, base: Str)
+    // The declared digest length does not match the bytes that follow.
+    MfDigestLengthMismatch(at: Int, declared: Int, actual: Int)
+    // A digest whose length is not the one its hash function produces —
+    // a `sha2-256` multihash whose digest is twenty bytes.  Answered
+    // only for the functions whose length this package knows; a
+    // function it has no entry for accepts any length.
+    MfWrongDigestLength(code: Int, want: Int, saw: Int)
+    // A multihash whose declared length is larger than this package
+    // will hold.
+    MfDigestTooLong(at: Int, len: Int)
+    // A content identifier whose version varint is neither 0 nor 1.
+    MfUnknownCidVersion(version: Int)
+    // A version 0 identifier that is not exactly thirty-four bytes
+    // beginning `0x12 0x20`, which is what version 0 IS.
+    MfBadCidV0(why: Str)
+    // A version 1 identifier asked to become version 0 when it cannot:
+    // version 0 is dag-pb and sha2-256 and nothing else.
+    MfNotV0Convertible(why: Str)
+    // Bytes were left over after a complete value was read.
+    MfTrailingBytes(at: Int, len: Int)
+    // A value was asked for a form it does not have — a version 0
+    // identifier asked for its multibase, which it has none of.
+    MfNoSuchForm(want: Str)
+
+// The standard `Error` implementation, so a bad identifier can be
+// reported by anything that reports errors.
+impl Error for MfFault
+    // Answer the one-line report: what was wrong, and where.
+    fn message(self) -> Str
+        todo("multiformats-nv.mferror.MfFault.message")
+
+// The byte offset a fault was found at, or `0` for the faults that are
+// about the value as a whole.
+//
+// ```novo
+// use mferror
+//
+// fn main() [io]
+//     println("${mferror.offset_of(MfTruncated(7, 2))}")   // 7
+// ```
+pub fn offset_of(f: MfFault) -> Int []
+    todo("multiformats-nv.mferror.offset_of")
+
+// A short, stable name for the fault, for a metric label or a test.
+//
+// The variant's own spelling with the `Mf` prefix removed and the words
+// separated by hyphens: `"varint-too-long"`, `"unknown-base"`,
+// `"not-v0-convertible"`.
+//
+// ```novo
+// use mferror
+//
+// fn main() [io]
+//     println(mferror.code_of(MfUnknownBase("q")))   // unknown-base
+// ```
+pub fn code_of(f: MfFault) -> Str []
+    todo("multiformats-nv.mferror.code_of")

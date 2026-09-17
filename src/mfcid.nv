@@ -1,0 +1,309 @@
+// mfcid — the content identifier, in both of its versions.
+//
+// Every body is a `todo()`.  The signatures are the design, and the
+// compiler checks them as claims; see the README for the stamp.
+//
+// WHAT A CID IS.  A version 1 content identifier is three things
+// concatenated: a version varint, a multicodec saying what the data it
+// points at IS, and a multihash of that data.  Written as text it gets
+// a multibase prefix in front, so the whole string is self-describing
+// from its first character.
+//
+// A version 0 identifier is older and is NOT that shape.  It is a bare
+// multihash, always sha2-256, and the data is always dag-pb.  It has no
+// version varint, no codec varint and no multibase prefix: it is always
+// written in base58btc, which is why every one of them begins `Qm` —
+// `0x12 0x20` in base58btc is those two characters.
+//
+// SO THE TWO VERSIONS ARE ONE TYPE WITH A VERSION FIELD, and the
+// asymmetry is in the conversions.  Every version 0 identifier has a
+// version 1 form: the same digest, with dag-pb and the version varint
+// written out.  A version 1 identifier has a version 0 form only when
+// its codec is dag-pb and its hash is sha2-256 — and `to_v0` answers
+// `MfNotV0Convertible` naming which of the two failed, rather than
+// producing an identifier for different data.
+//
+// EQUALITY IS OVER THE BYTES, NOT THE TEXT.  The same identifier
+// written in base32 and in base58btc is two strings and one identifier,
+// and a program that compared the strings would treat them as two
+// objects.  `equals` compares the binary form; `to_string` is where a
+// base is chosen.
+
+// A content identifier.
+pub struct MfCid
+    // `0` or `1`.
+    version: Int
+    // What the data is.  Always dag-pb at version 0.
+    codec: MfCodec
+    // The multihash of the data.  Always sha2-256 at version 0.
+    hash: MfMultihash
+
+// A version 1 identifier from a codec and a multihash.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     match mfhash.multihash(mfcodec.sha2_256(), bytes.zeros(32))
+//         Err(e) => println(e.message())
+//         Ok(h)  => println("${mfcid.cid_v1(mfcodec.raw(), h).version}")   // 1
+// ```
+pub fn cid_v1(codec: MfCodec, hash: MfMultihash) -> MfCid []
+    todo("multiformats-nv.mfcid.cid_v1")
+
+// A version 0 identifier from a sha2-256 multihash.
+//
+// `MfBadCidV0` when the multihash is not sha2-256 with a thirty-two
+// byte digest, because version 0 is exactly that and nothing else.
+//
+// ```novo
+// use std.bytes
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     match mfcid.cid_v0(mfhash.identity_multihash(bytes.zeros(2)))
+//         Ok(_)  => println("this cannot happen — version 0 is sha2-256")
+//         Err(e) => println(e.message())
+// ```
+pub fn cid_v0(hash: MfMultihash) -> Result<MfCid, MfFault> []
+    todo("multiformats-nv.mfcid.cid_v0")
+
+// The identifier's binary form.
+//
+// At version 1: the version varint, the codec varint, the multihash.
+// At version 0: the multihash alone, with no version and no codec —
+// which is what makes the two forms different lengths for the same
+// digest.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     println(bytes.to_hex(mfcid.to_bytes(mfcid.cid_v1(mfcodec.raw(), h))))
+// ```
+pub fn to_bytes(c: MfCid) -> Bytes []
+    todo("multiformats-nv.mfcid.to_bytes")
+
+// An identifier from its binary form.
+//
+// The first varint decides: a buffer beginning `0x12 0x20` and
+// thirty-four bytes long is a version 0 identifier, and anything else
+// is read as a version varint.  That special case is the specification's
+// own, and it is why version 1 could not have used `0x12` as its
+// version number.
+//
+// ```novo
+// use std.bytes
+// use mfcid
+//
+// fn main() [io]
+//     match mfcid.from_bytes(bytes.zeros(0))
+//         Ok(_)  => println("this cannot happen — an empty buffer is not a CID")
+//         Err(e) => println(e.message())
+// ```
+pub fn from_bytes(src: Bytes) -> Result<MfCid, MfFault> []
+    todo("multiformats-nv.mfcid.from_bytes")
+
+// An identifier from the front of a buffer, with the number of bytes it
+// took.
+//
+// What a reader walking a CAR file's blocks or a dag-pb node's links
+// uses, since both hold identifiers back to back.
+pub fn read(src: Bytes, at: Int) -> Result<MfCidRead, MfFault> []
+    todo("multiformats-nv.mfcid.read")
+
+// One identifier read out of a buffer.
+pub struct MfCidRead
+    // The identifier.
+    cid: MfCid
+    // How many bytes it took.
+    len: Int
+
+// The identifier as text, in a base the caller chooses.
+//
+// `MfNoSuchForm` when the identifier is version 0 and the base is not
+// base58btc: a version 0 identifier has no multibase prefix, so there
+// is nowhere to record that it was written differently, and a base58btc
+// string with no prefix is the only text form it has.
+//
+// ```novo
+// use std.bytes
+// use mfbase
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     match mfcid.to_string(mfcid.cid_v1(mfcodec.raw(), h), MfBase32)
+//         Ok(s)  => println(s)
+//         Err(e) => println(e.message())
+// ```
+pub fn to_string(c: MfCid, base: MfBase) -> Result<Str, MfFault> []
+    todo("multiformats-nv.mfcid.to_string")
+
+// The identifier as text in the base it is conventionally written in:
+// base58btc at version 0, base32 at version 1.
+//
+// The two defaults the IPFS tools use, and the reason a version 1
+// identifier of the same data looks nothing like its version 0 form.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     println(mfcid.to_default_string(mfcid.cid_v1(mfcodec.raw(), h)))
+// ```
+pub fn to_default_string(c: MfCid) -> Str []
+    todo("multiformats-nv.mfcid.to_default_string")
+
+// An identifier from text.
+//
+// A string of exactly forty-six characters beginning `Qm` is a version
+// 0 identifier in base58btc with no prefix; anything else is read as
+// multibase.  That rule is the specification's, and it is why a version
+// 0 identifier cannot be written in any other base.
+//
+// ```novo
+// use mfcid
+//
+// fn main() [io]
+//     match mfcid.parse("not a cid")
+//         Ok(_)  => println("this cannot happen")
+//         Err(e) => println(e.message())
+// ```
+pub fn parse(s: Str) -> Result<MfCid, MfFault> []
+    todo("multiformats-nv.mfcid.parse")
+
+// The version 1 form of an identifier.
+//
+// Always possible.  A version 0 identifier becomes dag-pb with the same
+// sha2-256 multihash, and a version 1 identifier is itself.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     println("${mfcid.to_v1(mfcid.cid_v1(mfcodec.raw(), h)).version}")   // 1
+// ```
+pub fn to_v1(c: MfCid) -> MfCid []
+    todo("multiformats-nv.mfcid.to_v1")
+
+// The version 0 form of an identifier.
+//
+// `MfNotV0Convertible` naming which rule failed: version 0 is dag-pb
+// and sha2-256, so an identifier with a raw codec or a blake3 digest
+// has no version 0 form at all.  Producing one anyway would produce an
+// identifier for different data, which is the one thing a content
+// address may never do.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     match mfcid.to_v0(mfcid.cid_v1(mfcodec.raw(), h))
+//         Ok(_)  => println("this cannot happen — raw is not dag-pb")
+//         Err(e) => println(e.message())
+// ```
+pub fn to_v0(c: MfCid) -> Result<MfCid, MfFault> []
+    todo("multiformats-nv.mfcid.to_v0")
+
+// Whether the identifier has a version 0 form.
+//
+// The question `to_v0` answers, without the error to unwrap.
+pub fn is_v0_convertible(c: MfCid) -> Bool []
+    todo("multiformats-nv.mfcid.is_v0_convertible")
+
+// Whether two identifiers name the same data.
+//
+// OVER THE BYTES, NOT THE TEXT.  The same identifier written in base32
+// and in base58btc is two strings and one identifier.  A version 0 and
+// its version 1 form are NOT equal here — they are different bytes and
+// different identifiers, and every system that stores both stores them
+// as two keys — and `equals_any_version` is the comparison for a caller
+// that wants them treated as one.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     let c = mfcid.cid_v1(mfcodec.raw(), h)
+//     println("${mfcid.equals(c, c)}")   // true
+// ```
+pub fn equals(a: MfCid, b: MfCid) -> Bool []
+    todo("multiformats-nv.mfcid.equals")
+
+// Whether two identifiers name the same data once both are read at
+// version 1.
+//
+// For a store that has migrated and holds both spellings of one object.
+pub fn equals_any_version(a: MfCid, b: MfCid) -> Bool []
+    todo("multiformats-nv.mfcid.equals_any_version")
+
+// Whether the identifier is well formed by the rules this package can
+// check without the data: the version is 0 or 1, version 0's codec and
+// hash are the fixed ones, the codec's table tag is an `ipld` or
+// `serialization` entry, and the multihash's digest is the length its
+// function produces.
+//
+// A codec this package has no name for passes, because an unknown code
+// is carried and not refused.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     match mfcid.check(mfcid.cid_v1(mfcodec.raw(), h))
+//         Ok(ok) => println("${ok}")   // true
+//         Err(e) => println(e.message())
+// ```
+pub fn check(c: MfCid) -> Result<Bool, MfFault> []
+    todo("multiformats-nv.mfcid.check")
+
+// The identifier written out for a person: the version, the codec's
+// name or its code, and the multihash's description.
+//
+// `"cidv1 raw sha2-256 32 e3b0c442…"`, which is what the `cid` tool
+// prints and what a diagnostic should say instead of repeating the
+// base32 string the reader already has.
+//
+// ```novo
+// use std.bytes
+// use mfcodec
+// use mfhash
+// use mfcid
+//
+// fn main() [io]
+//     let h = mfhash.identity_multihash(bytes.zeros(0))
+//     println(mfcid.describe(mfcid.cid_v1(mfcodec.raw(), h)))
+// ```
+pub fn describe(c: MfCid) -> Str []
+    todo("multiformats-nv.mfcid.describe")

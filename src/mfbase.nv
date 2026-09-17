@@ -1,0 +1,244 @@
+// mfbase — multibase: the encoding, written down in the string.
+//
+// Every body is a `todo()`.  The signatures are the design, and the
+// compiler checks them as claims; see the README for the stamp.
+//
+// THE PROBLEM IT SOLVES IS ONE CHARACTER WIDE.  A base-encoded string
+// does not say which base it is in, and `1111` is a valid base16,
+// base32, base58 and base64 string with four different meanings.  So
+// multibase puts the answer in front: the first character of the string
+// names the alphabet, and everything after it is the payload.
+//
+// `z` is base58btc, `b` is base32, `f` is base16, `u` is base64url, `m`
+// is base64.  A content identifier a person has pasted into a bug
+// report can therefore be decoded by a program that was told nothing
+// else about it, which is the whole point.
+//
+// CASE IS PART OF THE PREFIX.  `b` is lowercase base32 and `B` is
+// uppercase base32, and they are two entries in the table rather than
+// one entry and a flag.  That is the specification's own shape, and a
+// reader that lowercased a string before decoding it would turn a `B`
+// string into a `b` string whose payload no longer decodes.
+
+// One entry in the multibase table.
+//
+// Twenty-one of the table's rows: the ones a program that handles
+// content identifiers, keys and peer identifiers actually meets.  The
+// rows not here are the ones nothing in practice writes — base1, and
+// the emoji alphabet.
+//
+// ```novo
+// use mfbase
+//
+// fn main() [io]
+//     println(mfbase.prefix_of(MfBase58Btc))   // z
+// ```
+pub enum MfBase
+    // `0x00` — identity: the bytes themselves, with no encoding.  Its
+    // prefix is a NUL byte, so an identity-encoded multibase is not
+    // text and `encode_str` refuses it.
+    MfIdentity
+    // `0` — base2, one character per bit.
+    MfBase2
+    // `7` — base8.
+    MfBase8
+    // `9` — base10, which is a big-integer conversion and not a bit
+    // regrouping.
+    MfBase10
+    // `f` — base16, lowercase.
+    MfBase16
+    // `F` — base16, uppercase.
+    MfBase16Upper
+    // `b` — base32 with the RFC 4648 alphabet, lowercase, no padding.
+    // The base a content identifier is written in when it has to be a
+    // DNS label, because DNS is case-insensitive and base58 is not.
+    MfBase32
+    // `B` — base32, uppercase, no padding.
+    MfBase32Upper
+    // `c` — base32, lowercase, padded with `=`.
+    MfBase32Pad
+    // `C` — base32, uppercase, padded.
+    MfBase32PadUpper
+    // `v` — base32hex, lowercase, no padding.  The extended-hex
+    // alphabet, whose characters sort in the same order as the bytes
+    // they encode.
+    MfBase32Hex
+    // `V` — base32hex, uppercase, no padding.
+    MfBase32HexUpper
+    // `h` — z-base-32: a base32 alphabet reordered so that the
+    // characters people confuse are not adjacent.
+    MfBase32Z
+    // `k` — base36, lowercase.
+    MfBase36
+    // `K` — base36, uppercase.
+    MfBase36Upper
+    // `z` — base58 with the Bitcoin alphabet.  The default for a
+    // version 0 content identifier, and the reason one begins `Qm`.
+    MfBase58Btc
+    // `Z` — base58 with the Flickr alphabet, which differs from the
+    // Bitcoin one only in case order.
+    MfBase58Flickr
+    // `m` — base64, no padding.
+    MfBase64
+    // `M` — base64, padded.
+    MfBase64Pad
+    // `u` — base64url, no padding.
+    MfBase64Url
+    // `U` — base64url, padded.
+    MfBase64UrlPad
+
+// The prefix character, as it is written: `"z"`, `"b"`, `"U"`.
+//
+// The identity base's prefix is the NUL byte, and this answers `"\0"`
+// for it.
+pub fn prefix_of(b: MfBase) -> Str []
+    todo("multiformats-nv.mfbase.prefix_of")
+
+// The base a prefix character names, or `MfUnknownBase`.
+//
+// ```novo
+// use mfbase
+//
+// fn main() [io]
+//     match mfbase.base_of_prefix("z")
+//         Ok(b)  => println(mfbase.name_of(b))   // base58btc
+//         Err(e) => println(e.message())
+// ```
+pub fn base_of_prefix(prefix: Str) -> Result<MfBase, MfFault> []
+    todo("multiformats-nv.mfbase.base_of_prefix")
+
+// The base's name, as the multibase table writes it: `"base58btc"`,
+// `"base32"`, `"base64urlpad"`.
+pub fn name_of(b: MfBase) -> Str []
+    todo("multiformats-nv.mfbase.name_of")
+
+// The base of that name, or `MfUnknownBase`.
+//
+// For a caller taking a base from a configuration file or a
+// command-line flag, where a name reads better than a prefix
+// character.
+pub fn base_of_name(name: Str) -> Result<MfBase, MfFault> []
+    todo("multiformats-nv.mfbase.base_of_name")
+
+// The alphabet, in the order its digits count.
+//
+// Exposed because a reader of this package should be able to check a
+// table rather than take it, and because a caller writing a message
+// about a bad character wants to show what was allowed.  `""` for the
+// identity base, which has no alphabet.
+//
+// ```novo
+// use std.str
+// use mfbase
+//
+// fn main() [io]
+//     println("${str.len(mfbase.alphabet_of(MfBase32))}")   // 32
+// ```
+pub fn alphabet_of(b: MfBase) -> Str []
+    todo("multiformats-nv.mfbase.alphabet_of")
+
+// Whether the base's alphabet pads with `=`.
+//
+// True for `MfBase32Pad`, `MfBase32PadUpper`, `MfBase64Pad` and
+// `MfBase64UrlPad`.
+pub fn is_padded(b: MfBase) -> Bool []
+    todo("multiformats-nv.mfbase.is_padded")
+
+// Whether the base is a big-integer conversion rather than a
+// regrouping of bits.
+//
+// True for base10, base36, base58btc and base58flickr.  It changes what
+// a leading zero byte does: a regrouping encodes it like any other
+// byte, and a big-integer base has to write it as a separate leading
+// digit — which is why a base58btc string that decodes to bytes
+// beginning `0x00` begins with `1`, and why an implementation that
+// forgets loses the byte.
+//
+// ```novo
+// use mfbase
+//
+// fn main() [io]
+//     println("${mfbase.is_big_integer_base(MfBase58Btc)}")   // true
+//     println("${mfbase.is_big_integer_base(MfBase32)}")      // false
+// ```
+pub fn is_big_integer_base(b: MfBase) -> Bool []
+    todo("multiformats-nv.mfbase.is_big_integer_base")
+
+// The bytes as a multibase string: the prefix, then the payload.
+//
+// `MfNoSuchForm` for `MfIdentity`, whose prefix is a NUL byte and whose
+// result is therefore not text.  `encode_bytes` is the form that holds
+// it.
+//
+// ```novo
+// use std.bytes
+// use mfbase
+//
+// fn main() [io]
+//     match mfbase.encode(MfBase16, bytes.from_hex("01") ?? bytes.zeros(0))
+//         Ok(s)  => println(s)   // f01
+//         Err(e) => println(e.message())
+// ```
+pub fn encode(b: MfBase, src: Bytes) -> Result<Str, MfFault> []
+    todo("multiformats-nv.mfbase.encode")
+
+// The same, as bytes, so that the identity base has somewhere to go.
+pub fn encode_bytes(b: MfBase, src: Bytes) -> Bytes []
+    todo("multiformats-nv.mfbase.encode_bytes")
+
+// The bytes a multibase string carries.
+//
+// The first character chooses the alphabet; everything after it is the
+// payload.
+//
+// ```novo
+// use std.bytes
+// use mfbase
+//
+// fn main() [io]
+//     match mfbase.decode("f01")
+//         Ok(b)  => println(bytes.to_hex(b))   // 01
+//         Err(e) => println(e.message())
+// ```
+pub fn decode(s: Str) -> Result<Bytes, MfFault> []
+    todo("multiformats-nv.mfbase.decode")
+
+// The bytes, and which base they were written in.
+//
+// What a tool that re-encodes an identifier needs: to write it in
+// another base and say which one it came from.
+//
+// ```novo
+// use mfbase
+//
+// fn main() [io]
+//     match mfbase.decode_tagged("f01")
+//         Ok(d)  => println(mfbase.name_of(d.base))   // base16
+//         Err(e) => println(e.message())
+// ```
+pub fn decode_tagged(s: Str) -> Result<MfDecoded, MfFault> []
+    todo("multiformats-nv.mfbase.decode_tagged")
+
+// A decoded multibase string and the base it was in.
+pub struct MfDecoded
+    // Which alphabet the prefix named.
+    base: MfBase
+    // The payload.
+    data: Bytes
+
+// The base a string's first character names, without decoding the
+// payload.
+//
+// The cheapest question, for a caller sorting a list of identifiers by
+// how they were written.
+//
+// ```novo
+// use mfbase
+//
+// fn main() [io]
+//     match mfbase.base_of("zQm")
+//         Ok(b)  => println(mfbase.name_of(b))   // base58btc
+//         Err(e) => println(e.message())
+// ```
+pub fn base_of(s: Str) -> Result<MfBase, MfFault> []
+    todo("multiformats-nv.mfbase.base_of")
